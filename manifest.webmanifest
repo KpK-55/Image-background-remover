@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Study Image Editor",
   "short_name": "Study Editor",
-  "description": "Offline study image background remover, colour inverter and image enhancer.",
+  "description": "Offline study image background remover, colour inverter and detail tools.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
