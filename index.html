@@ -32,7 +32,7 @@ canvas{display:block;max-width:none;height:auto;flex:none;touch-action:none;curs
 </style>
 </head>
 <body>
-<header><div><h1>Study Image Editor</h1><p>Two essential tools: background removal and colour inversion</p></div><span class="pill" id="dimensions">No image loaded</span></header>
+<header><div><h1>Study Image Editor</h1><p>Background removal, smooth colour inversion and optional image enhancement</p></div><span class="pill" id="dimensions">No image loaded</span></header>
 <main>
 <section>
   <div class="toolbar">
@@ -46,7 +46,7 @@ canvas{display:block;max-width:none;height:auto;flex:none;touch-action:none;curs
   <div class="toolbar">
     <div class="group"><label>Brush size <b id="sizeVal">32</b> px</label><input id="brushSize" type="range" min="4" max="180" value="32"></div>
     <div class="group"><label>Colour tolerance <b id="tolVal">35</b></label><input id="tolerance" type="range" min="5" max="120" value="35"></div>
-    <span class="hint">Click removes a connected colour region. Brush removes matching pixels under the brush.</span>
+    <span class="hint">Click removes a connected region, or enable global matching to also remove enclosed letter holes. Brush removes matching pixels under the brush.</span>
   </div>
   <div class="canvas-shell" id="canvasShell"><div class="canvas-inner" id="canvasInner">
     <div class="empty" id="empty"><strong>Drop an image here</strong>or use Open image / Paste (Ctrl+V). Processing stays on this device.</div>
@@ -61,14 +61,20 @@ canvas{display:block;max-width:none;height:auto;flex:none;touch-action:none;curs
     <div class="control"><div class="row"><label>Colour tolerance</label><b id="tolVal2">35</b></div><input id="tolerance2" type="range" min="5" max="120" value="35"></div>
     <div class="control"><div class="row"><label><input id="protectDetails" type="checkbox" checked style="accent-color:#4d8dff;vertical-align:middle"> Protect fine lines and edges</label><span class="pill">ON</span></div><p>Helps retain likely foreground details during background removal. This is heuristic protection, not AI recognition.</p></div>
     <div class="control"><div class="row"><label>Protection strength</label><b id="detailVal">55</b></div><input id="detailStrength" type="range" min="0" max="100" value="55"></div>
+    <div class="control"><label><input id="globalMatch" type="checkbox" style="accent-color:#4d8dff;vertical-align:middle"> Remove matching colour everywhere (including enclosed letter holes)</label><p>Useful for the white/black centres of letters such as g, o, a and e. This can also remove matching-colour details elsewhere in the illustration; use a low tolerance.</p></div>
     <div class="toolgrid"><button id="restoreBackground">Restore original image</button><button id="invertTransparency">Invert transparency</button></div>
   </div>
   <div class="panel">
     <h2>Colour inverter</h2>
-    <p>Neutral tones (black, grey and white) switch to their opposite. Coloured parts keep their colour identity instead of becoming negative colours.</p>
-    <div class="control"><div class="row"><label>Darken very light colours</label><b id="darkVal">35%</b></div><input id="darken" type="range" min="0" max="80" value="35"></div>
+    <p>Smoothly inverts neutral black/grey/white tones while retaining the hue of coloured structures. Soft anti-aliased edges are blended instead of split by a hard threshold.</p>
+    <div class="control"><div class="row"><label>Darken very light colours</label><b id="darkVal">0%</b></div><input id="darken" type="range" min="0" max="80" value="0"></div>
     <button id="invertBtn2" style="width:100%">Apply colour inversion</button>
     <p>Use Undo to compare with the original. Transparent pixels remain transparent.</p>
+  </div>
+  <div class="panel">
+    <h2>Image quality</h2>
+    <p>Gentle edge sharpening can improve perceived clarity. 2× enlargement uses high-quality browser resampling; it cannot recreate detail absent from the original.</p>
+    <div class="toolgrid"><button id="enhanceQuality">Enhance edges</button><button id="upscale2x">Upscale 2×</button></div>
   </div>
   <div class="panel">
     <h2>Export</h2>
@@ -105,7 +111,33 @@ $('detailStrength').oninput=e=>$('detailVal').textContent=e.target.value;
 function dist(data,i,seed){return Math.hypot(data[i]-seed[0],data[i+1]-seed[1],data[i+2]-seed[2]);}
 function lum(r,g,b){return .2126*r+.7152*g+.0722*b;}
 function protectPixel(data,x,y,w,h,seed){if(!$('protectDetails').checked)return false;const strength=+$('detailStrength').value;if(!strength)return false;const i=(y*w+x)*4,L=lum(data[i],data[i+1],data[i+2]);let sum=0,n=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=w||yy>=h)continue;const j=(yy*w+xx)*4;sum+=lum(data[j],data[j+1],data[j+2]);n++;}const contrast=n?Math.abs(L-sum/n):0,seedL=lum(...seed),threshold=52-strength*.36;return contrast>=threshold&&Math.abs(L-seedL)>=threshold*.65;}
-function regionRemove(x,y){const w=canvas.width,h=canvas.height,src=sourceAtSize().data,cur=ctx.getImageData(0,0,w,h),d=cur.data,seed=[src[(y*w+x)*4],src[(y*w+x)*4+1],src[(y*w+x)*4+2]],tol=+$('tolerance').value*Math.sqrt(3),visited=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0,removed=0;queue[tail++]=y*w+x;visited[y*w+x]=1;while(head<tail){const p=queue[head++],px=p%w,py=(p/w)|0,i=p*4;if(dist(src,i,seed)<=tol){if(!protectPixel(src,px,py,w,h,seed)&&d[i+3]){d[i+3]=0;removed++;}if(px>0&&!visited[p-1]){visited[p-1]=1;queue[tail++]=p-1;}if(px<w-1&&!visited[p+1]){visited[p+1]=1;queue[tail++]=p+1;}if(py>0&&!visited[p-w]){visited[p-w]=1;queue[tail++]=p-w;}if(py<h-1&&!visited[p+w]){visited[p+w]=1;queue[tail++]=p+w;}}}ctx.putImageData(cur,0,0);return removed;}
+function regionRemove(x,y){
+  const w=canvas.width,h=canvas.height,src=sourceAtSize().data,cur=ctx.getImageData(0,0,w,h),d=cur.data;
+  const si=(y*w+x)*4,seed=[src[si],src[si+1],src[si+2]],tol=+$('tolerance').value*Math.sqrt(3);
+  let removed=0;
+  if($('globalMatch').checked){
+    // Global colour-key mode removes disconnected matching components too,
+    // including enclosed counters inside letters. Detail protection is bypassed
+    // deliberately here because those enclosed pixels look like high-contrast details.
+    for(let i=0;i<d.length;i+=4){
+      if(d[i+3] && dist(src,i,seed)<=tol){d[i+3]=0;removed++;}
+    }
+  }else{
+    const visited=new Uint8Array(w*h),queue=new Int32Array(w*h);let head=0,tail=0;
+    queue[tail++]=y*w+x;visited[y*w+x]=1;
+    while(head<tail){
+      const q=queue[head++],px=q%w,py=(q/w)|0,i=q*4;
+      if(dist(src,i,seed)<=tol){
+        if(!protectPixel(src,px,py,w,h,seed)&&d[i+3]){d[i+3]=0;removed++;}
+        if(px>0&&!visited[q-1]){visited[q-1]=1;queue[tail++]=q-1;}
+        if(px<w-1&&!visited[q+1]){visited[q+1]=1;queue[tail++]=q+1;}
+        if(py>0&&!visited[q-w]){visited[q-w]=1;queue[tail++]=q-w;}
+        if(py<h-1&&!visited[q+w]){visited[q+w]=1;queue[tail++]=q+w;}
+      }
+    }
+  }
+  ctx.putImageData(cur,0,0);return removed;
+}
 function brushRemove(x,y){const w=canvas.width,h=canvas.height,src=sourceAtSize().data,cur=ctx.getImageData(0,0,w,h),d=cur.data,size=+$('brushSize').value,r=size/2,seedI=(y*w+x)*4,seed=[src[seedI],src[seedI+1],src[seedI+2]],tol=+$('tolerance').value*Math.sqrt(3);let n=0;for(let yy=Math.max(0,y-r);yy<=Math.min(h-1,y+r);yy++)for(let xx=Math.max(0,x-r);xx<=Math.min(w-1,x+r);xx++){if((xx-x)**2+(yy-y)**2>r*r)continue;const i=(yy*w+xx)*4;if(dist(src,i,seed)<=tol&&!protectPixel(src,xx,yy,w,h,seed)){if(d[i+3])n++;d[i+3]=0;}}ctx.putImageData(cur,0,0);return n;}
 function coords(e){const r=canvas.getBoundingClientRect();return{x:clamp(Math.floor((e.clientX-r.left)*canvas.width/r.width),0,canvas.width-1),y:clamp(Math.floor((e.clientY-r.top)*canvas.height/r.height),0,canvas.height-1)};}
 canvas.addEventListener('pointerdown',e=>{if(!original)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);const p=coords(e);drawing=true;if(mode==='click'){const n=regionRemove(p.x,p.y);snapshot();status(`Removed ${n.toLocaleString()} pixels. Adjust tolerance if needed.`);drawing=false;}else{const n=brushRemove(p.x,p.y);status(`Removed ${n.toLocaleString()} matching pixels.`);}});
@@ -113,8 +145,58 @@ canvas.addEventListener('pointermove',e=>{if(!drawing||mode!=='brush')return;con
 canvas.addEventListener('pointerup',()=>{if(drawing){drawing=false;snapshot();}});canvas.addEventListener('pointercancel',()=>{if(drawing){drawing=false;snapshot();}});
 $('restoreBackground').onclick=()=>{if(!original)return;canvas.width=originalW;canvas.height=originalH;ctx.putImageData(original,0,0);snapshot();status('Original image restored.');};
 $('invertTransparency').onclick=()=>{if(!original)return;const im=ctx.getImageData(0,0,canvas.width,canvas.height),d=im.data;for(let i=0;i<d.length;i+=4)d[i+3]=255-d[i+3];ctx.putImageData(im,0,0);snapshot();status('Transparency mask inverted.');};
-function invertColours(){if(!original)return;const im=ctx.getImageData(0,0,canvas.width,canvas.height),d=im.data,darken=+$('darken').value/100;for(let i=0;i<d.length;i+=4){if(!d[i+3])continue;const r=d[i],g=d[i+1],b=d[i+2],hi=Math.max(r,g,b),lo=Math.min(r,g,b),sat=hi===0?0:(hi-lo)/hi,L=lum(r,g,b);if(sat<.16){const v=255-L;d[i]=d[i+1]=d[i+2]=Math.round(v);}else if(L>175&&darken>0){const target=L-(L-145)*darken,scale=target/Math.max(1,L);d[i]=Math.round(r*scale);d[i+1]=Math.round(g*scale);d[i+2]=Math.round(b*scale);}}ctx.putImageData(im,0,0);snapshot();status('Colour inversion applied to neutral tones. Coloured structures retain their colour identity.');}
+function smoothstep(a,b,x){const t=clamp((x-a)/(b-a),0,1);return t*t*(3-2*t);}
+function invertColours(){
+  if(!original)return;
+  const im=ctx.getImageData(0,0,canvas.width,canvas.height),d=im.data,darken=+$('darken').value/100;
+  for(let i=0;i<d.length;i+=4){
+    if(!d[i+3])continue;
+    const r=d[i],g=d[i+1],b=d[i+2],hi=Math.max(r,g,b),lo=Math.min(r,g,b);
+    const chroma=hi-lo,L=lum(r,g,b);
+    // Continuous neutral weighting avoids hard threshold boundaries that create
+    // coloured/pixelated fringes around subpixel-antialiased text.
+    const neutral=1-smoothstep(8,58,chroma);
+    const delta=(255-L)-L;
+    d[i]=Math.round(clamp(r+delta*neutral,0,255));
+    d[i+1]=Math.round(clamp(g+delta*neutral,0,255));
+    d[i+2]=Math.round(clamp(b+delta*neutral,0,255));
+    // Optional gentle darkening for very pale saturated colours; off by default.
+    if(neutral<0.15 && L>205 && darken>0){
+      const factor=1-((L-205)/50)*darken*0.55;
+      d[i]=Math.round(d[i]*factor);d[i+1]=Math.round(d[i+1]*factor);d[i+2]=Math.round(d[i+2]*factor);
+    }
+  }
+  ctx.putImageData(im,0,0);snapshot();
+  status('Smooth colour inversion applied. Neutral tones invert continuously; coloured structures retain their hues.');
+}
 $('invertBtn').onclick=$('invertBtn2').onclick=invertColours;$('darken').oninput=e=>$('darkVal').textContent=e.target.value+'%';
+function enhanceEdges(){
+  if(!original)return;
+  const w=canvas.width,h=canvas.height,im=ctx.getImageData(0,0,w,h),src=im.data,out=new Uint8ClampedArray(src.length);
+  const at=(x,y,c)=>src[(clamp(y,0,h-1)*w+clamp(x,0,w-1))*4+c];
+  // Separable 3x3 Gaussian blur, followed by a restrained unsharp mask.
+  const amount=0.38;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+    const i=(y*w+x)*4;
+    for(let c=0;c<3;c++){
+      const blur=(at(x-1,y-1,c)+2*at(x,y-1,c)+at(x+1,y-1,c)
+        +2*at(x-1,y,c)+4*at(x,y,c)+2*at(x+1,y,c)
+        +at(x-1,y+1,c)+2*at(x,y+1,c)+at(x+1,y+1,c))/16;
+      out[i+c]=clamp(src[i+c]+amount*(src[i+c]-blur),0,255);
+    }
+    out[i+3]=src[i+3];
+  }
+  im.data.set(out);ctx.putImageData(im,0,0);snapshot();status('Gentle edge enhancement applied. It improves perceived sharpness but cannot restore missing source detail.');
+}
+function upscale2x(){
+  if(!original)return;
+  const w=canvas.width,h=canvas.height;
+  if(w*2>10000||h*2>10000||w*h*4>50000000){status('Image is too large for safe 2× enlargement on this device.');return;}
+  const temp=document.createElement('canvas');temp.width=w;temp.height=h;temp.getContext('2d').drawImage(canvas,0,0);
+  canvas.width=w*2;canvas.height=h*2;ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(temp,0,0,w*2,h*2);
+  applyZoom();snapshot();status('Image enlarged 2× using high-quality resampling. No new source detail is invented.');
+}
+$('enhanceQuality').onclick=enhanceEdges;$('upscale2x').onclick=upscale2x;
 function applyZoom(){if(!canvas.width)return;canvas.style.width=Math.round(canvas.width*zoom)+'px';canvas.style.height=Math.round(canvas.height*zoom)+'px';$('zoomLabel').textContent=Math.round(zoom*100)+'%';}
 function setZoom(z){zoom=clamp(z,.1,5);applyZoom();}
 function fitZoom(){if(!canvas.width)return;const available=Math.max(100,shell.clientWidth-44);setZoom(Math.min(1,available/canvas.width));}
