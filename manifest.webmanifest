@@ -2,18 +2,12 @@
   "id": "./",
   "name": "Study Image Editor",
   "short_name": "Study Editor",
-  "description": "Offline image cleanup and transparent PNG export for study notes.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",
   "background_color": "#101319",
   "theme_color": "#141a23",
-  "categories": [
-    "education",
-    "productivity",
-    "utilities"
-  ],
   "icons": [
     {
       "src": "./icons/icon-192.png",
