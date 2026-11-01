@@ -1,1 +1,63 @@
-const CACHE="study-image-editor-v6";const FILES=["./","./index.html","./manifest.webmanifest","./icons/icon-192.png","./icons/icon-512.png"];self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(FILES)).then(()=>self.skipWaiting())));self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(a=>Promise.all(a.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));self.addEventListener("fetch",e=>{if(e.request.method!=="GET")return;const u=new URL(e.request.url);if(u.origin!==self.location.origin)return;e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request).then(v=>{if(v.ok)caches.open(CACHE).then(c=>c.put(e.request,v.clone()));return v;}).catch(()=>caches.match("./index.html")));});
+const CACHE_NAME = "study-image-editor-v7";
+const BASE = self.registration.scope;
+const APP_SHELL = [
+  BASE,
+  new URL("index.html", BASE).href,
+  new URL("manifest.webmanifest", BASE).href,
+  new URL("icons/favicon-32.png", BASE).href,
+  new URL("icons/icon-192.png", BASE).href,
+  new URL("icons/icon-512.png", BASE).href,
+  new URL("icons/icon-192-maskable.png", BASE).href,
+  new URL("icons/icon-512-maskable.png", BASE).href
+];
+
+self.addEventListener("install", event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(APP_SHELL))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener("fetch", event => {
+  const request = event.request;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+  if (!url.href.startsWith(BASE)) return;
+
+  if (request.mode === "navigate") {
+    event.respondWith(
+      fetch(request).then(response => {
+        const copy = response.clone();
+        caches.open(CACHE_NAME).then(cache => cache.put(new URL("index.html", BASE).href, copy));
+        return response;
+      }).catch(async () => {
+        return (await caches.match(request)) ||
+               (await caches.match(new URL("index.html", BASE).href)) ||
+               (await caches.match(BASE));
+      })
+    );
+    return;
+  }
+
+  event.respondWith(
+    caches.match(request).then(cached => {
+      if (cached) return cached;
+      return fetch(request).then(response => {
+        if (response && response.ok) {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(request, copy));
+        }
+        return response;
+      });
+    })
+  );
+});

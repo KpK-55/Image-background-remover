@@ -6,7 +6,12 @@
 <meta name="theme-color" content="#141a23">
 <meta name="description" content="Offline background remover and colour inverter for study images.">
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="./icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" href="./icons/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Study Editor">
 <title>Study Image Editor</title>
 <style>
 :root{color-scheme:dark;--bg:#101319;--panel:#191f29;--panel2:#202938;--line:#303b4c;--text:#edf2f8;--muted:#9eacbd;--blue:#4d8dff;--green:#16a078}
@@ -32,7 +37,7 @@ canvas{display:block;max-width:none;height:auto;flex:none;touch-action:none;curs
 </style>
 </head>
 <body>
-<header><div><h1>Study Image Editor</h1><p>Background removal, smooth colour inversion and optional image enhancement</p></div><span class="pill" id="dimensions">No image loaded</span></header>
+<header><div><h1>Study Image Editor</h1><p>Background removal, smooth colour inversion and optional image enhancement</p></div><div style="display:flex;align-items:center;gap:8px"><button id="installApp" hidden>Install app</button><span class="pill" id="dimensions">No image loaded</span></div></header>
 <main>
 <section>
   <div class="toolbar">
@@ -285,7 +290,18 @@ async function download(){if(!original)return;const blob=await new Promise(r=>ca
 $('downloadBtn').onclick=$('saveBtn').onclick=download;
 $('copyBtn').onclick=async()=>{try{const blob=await new Promise(r=>canvas.toBlob(r,'image/png'));await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);status('PNG copied.');}catch(e){status('Copy unavailable here. Use Save PNG.');}};
 sync();
-if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./service-worker.js').catch(console.warn));
+// Browser-native PWA install prompt (supported by Chromium browsers when install criteria are met).
+let installPrompt=null;
+const installButton=$('installApp');
+window.addEventListener('beforeinstallprompt',event=>{
+  event.preventDefault();installPrompt=event;installButton.hidden=false;
+});
+installButton.addEventListener('click',async()=>{
+  if(!installPrompt){status('Use your browser menu and choose Install app or Add to Home screen.');return;}
+  installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;installButton.hidden=true;
+});
+window.addEventListener('appinstalled',()=>{installButton.hidden=true;status('Study Image Editor installed.');});
+if('serviceWorker'in navigator&&location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register(new URL('./service-worker.js',document.baseURI),{scope:'./'}).catch(err=>{console.error('Service worker registration failed:',err);status('Offline setup failed. Open the published HTTPS website in a supported browser.');}));
 })();
 </script>
 </body>
